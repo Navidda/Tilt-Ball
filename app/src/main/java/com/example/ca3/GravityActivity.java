@@ -116,12 +116,12 @@ public class GravityActivity extends AppCompatActivity implements SensorEventLis
         private void updateCoordinates() {
             float v = (float) Math.hypot(vx, vy);
             if (Math.abs(v) > 0.1) {
-                float fk = gravity[2] * mooK;
+                float fk = Math.max(gravity[2] * mooK, 0);
                 vx += -gravity[0] - fk * vx / v;
                 vy += gravity[1] - fk * vy / v;
             }
             else {
-                float fs = gravity[2] * mooS;
+                float fs = Math.max(gravity[2] * mooS, 0);
                 float fxy = (float) Math.hypot(gravity[0], gravity[1]);
                 if (fxy < fs)
                     return;

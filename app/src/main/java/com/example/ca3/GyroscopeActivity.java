@@ -10,12 +10,14 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.view.MotionEvent;
 import android.view.View;
+
 
 public class GyroscopeActivity extends AppCompatActivity implements SensorEventListener {
     TiltBallView tiltBallView;
     private SensorManager sensorManager;
-    private Sensor gravitySensor;
+    private Sensor gyroSensor;
 
     /**
      * Called when the activity is first created.
@@ -28,14 +30,14 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         setContentView(tiltBallView);
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        gravitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+        gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
 
     }
 
@@ -47,7 +49,7 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_GRAVITY) {
+        if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
             tiltBallView.onSensorEvent(event);
         }
     }
@@ -72,6 +74,7 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
             super(context);
             paint = new Paint();
             paint.setColor(Color.BLACK);
+            deltaTheta = new float[]{0, 0};
         }
 
         @Override
@@ -87,6 +90,7 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            if (gravity == null) return;
             updateCoordinates();
             canvas.drawCircle((int) x, (int) y, CIRCLE_RADIUS, paint);
             invalidate();
@@ -116,12 +120,11 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         private void updateCoordinates() {
             float v = (float) Math.hypot(vx, vy);
             if (Math.abs(v) > 0.1) {
-                float fk = gravity[2] * mooK;
+                float fk = Math.max(0, gravity[2] * mooK);
                 vx += -gravity[0] - fk * vx / v;
                 vy += gravity[1] - fk * vy / v;
-            }
-            else {
-                float fs = gravity[2] * mooS;
+            } else {
+                float fs = Math.max(0, gravity[2] * mooS);
                 float fxy = (float) Math.hypot(gravity[0], gravity[1]);
                 if (fxy < fs)
                     return;
@@ -134,9 +137,34 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
             validateCoordinates();
         }
 
+        // Create a constant to convert nanoseconds to seconds.
+        private static final float NS2S = 1.0f / 1000000000.0f;
+        private float[] deltaTheta;
+        private float timestamp;
+
         public void onSensorEvent(SensorEvent event) {
             //
-            gravity = event.values;
+            // This timestep's delta rotation to be multiplied by the current rotation
+            // after computing it from the gyro sample data.
+            if (timestamp != 0) {
+                final float dT = (event.timestamp - timestamp) * NS2S;
+                // Axis of the rotation sample, not normalized yet.
+                float wX = event.values[0];
+                float wY = event.values[1];
+
+                deltaTheta[0] += wX * dT;
+                deltaTheta[1] += wY * dT;
+
+                gravity[0] = (float) Math.sin(-deltaTheta[1]);
+                gravity[1] = (float) Math.sin(deltaTheta[0]);
+                gravity[2] = (float) Math.cos(Math.hypot(deltaTheta[0], deltaTheta[1]));
+
+            } else {
+                gravity = new float[]{0, 0, 1};
+            }
+            timestamp = event.timestamp;
         }
+
+
     }
 }
