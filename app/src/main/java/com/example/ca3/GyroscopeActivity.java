@@ -10,7 +10,8 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
-import android.view.MotionEvent;
+import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.View;
 
 
@@ -61,6 +62,10 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
 
     private class TiltBallView extends View {
         private static final int CIRCLE_RADIUS = 70; //pixels
+        private static final float GRAVITY = 10; // Newtons
+        private static final float MASS = 0.01f; // Kilograms
+
+
         private static final float mooS = 0.15f;
         private static final float mooK = 0.1f;
 
@@ -69,12 +74,15 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         private float[] gravity;
         private int viewWidth;
         private int viewHeight;
+        private float PixelsPerMetersX;
+        private float PixelsPerMetersY;
+        private float lastUpdateNS;
 
         public TiltBallView(Context context) {
             super(context);
             paint = new Paint();
             paint.setColor(Color.BLACK);
-            deltaTheta = new float[]{0, 0};
+            setScreenDimensions();
         }
 
         @Override
@@ -95,6 +103,19 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
             canvas.drawCircle((int) x, (int) y, CIRCLE_RADIUS, paint);
             invalidate();
 
+        }
+
+        private void setScreenDimensions() {
+            float mXDpi;
+            float mYDpi;
+            DisplayMetrics metrics = new DisplayMetrics();
+            getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            mXDpi = metrics.xdpi; // The exact physical pixels per inch of the screen in the X dimension.
+            mYDpi = metrics.ydpi;
+            PixelsPerMetersX = mXDpi / 10.0254f; // 1 inch == 0.0254 metre
+            PixelsPerMetersY = mYDpi / 10.0254f;
+            Log.d("HI", "setScreenDimensions: PixelsPerMetersX = " + String.valueOf(PixelsPerMetersX));
+            Log.d("HI", "setScreenDimensions: PixelsPerMetersY = " + String.valueOf(PixelsPerMetersY));
         }
 
         private void validateCoordinates() {
@@ -118,28 +139,32 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         }
 
         private void updateCoordinates() {
+            float currentNS = System.nanoTime();
+            float timeDeltaS = (currentNS - lastUpdateNS) * NS2S;
+            lastUpdateNS = currentNS;
             float v = (float) Math.hypot(vx, vy);
             if (Math.abs(v) > 0.1) {
                 float fk = Math.max(0, gravity[2] * mooK);
-                vx += -gravity[0] - fk * vx / v;
-                vy += gravity[1] - fk * vy / v;
-            } else {
+                vx += timeDeltaS * (-gravity[0] - fk * vx / v) / MASS;
+                vy += timeDeltaS * (gravity[1] - fk * vy / v) / MASS;
+            }
+            else {
                 float fs = Math.max(0, gravity[2] * mooS);
                 float fxy = (float) Math.hypot(gravity[0], gravity[1]);
                 if (fxy < fs)
                     return;
-                vx += -gravity[0];
-                vy += gravity[1];
+                vx += timeDeltaS * -gravity[0] / MASS;
+                vy += timeDeltaS * gravity[1] / MASS;
             }
-
-            x += vx;
-            y += vy;
+            x += vx * PixelsPerMetersX * timeDeltaS;
+            y += vy * PixelsPerMetersY * timeDeltaS;
             validateCoordinates();
         }
 
+
         // Create a constant to convert nanoseconds to seconds.
         private static final float NS2S = 1.0f / 1000000000.0f;
-        private float[] deltaTheta;
+        private float[] deltaTheta = new float[]{0, 0};
         private float timestamp;
 
         public void onSensorEvent(SensorEvent event) {
@@ -155,11 +180,12 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
                 deltaTheta[0] += wX * dT;
                 deltaTheta[1] += wY * dT;
 
-                gravity[0] = (float) Math.sin(-deltaTheta[1]);
-                gravity[1] = (float) Math.sin(deltaTheta[0]);
-                gravity[2] = (float) Math.cos(Math.hypot(deltaTheta[0], deltaTheta[1]));
+                gravity[0] = GRAVITY * (float) Math.sin(-deltaTheta[1]);
+                gravity[1] = GRAVITY * (float) Math.sin(deltaTheta[0]);
+                gravity[2] = (float) Math.sqrt(GRAVITY*GRAVITY - Math.pow(gravity[0], 2) -  Math.pow(gravity[1], 2));
 
-            } else {
+            }
+            else {
                 gravity = new float[]{0, 0, 1};
             }
             timestamp = event.timestamp;

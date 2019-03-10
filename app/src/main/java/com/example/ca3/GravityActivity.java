@@ -10,12 +10,15 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.View;
 
 public class GravityActivity extends AppCompatActivity implements SensorEventListener {
     TiltBallView tiltBallView;
     private SensorManager sensorManager;
     private Sensor gravitySensor;
+    String TAG = "Gravity";
 
     /**
      * Called when the activity is first created.
@@ -59,6 +62,8 @@ public class GravityActivity extends AppCompatActivity implements SensorEventLis
 
     private class TiltBallView extends View {
         private static final int CIRCLE_RADIUS = 70; //pixels
+        private static final float NS2S = 1.0f / 1000000000.0f;
+        private static final float MASS = 0.01f; // Kilograms
         private static final float mooS = 0.15f;
         private static final float mooK = 0.1f;
 
@@ -67,11 +72,16 @@ public class GravityActivity extends AppCompatActivity implements SensorEventLis
         private float[] gravity;
         private int viewWidth;
         private int viewHeight;
+        private float PixelsPerMetersX;
+        private float PixelsPerMetersY;
+        private float lastUpdateNS;
 
         public TiltBallView(Context context) {
             super(context);
             paint = new Paint();
             paint.setColor(Color.BLACK);
+            setScreenDimensions();
+            lastUpdateNS = System.nanoTime();
         }
 
         @Override
@@ -87,10 +97,22 @@ public class GravityActivity extends AppCompatActivity implements SensorEventLis
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            if (gravity == null) return;
             updateCoordinates();
             canvas.drawCircle((int) x, (int) y, CIRCLE_RADIUS, paint);
             invalidate();
 
+        }
+
+        private void setScreenDimensions() {
+            float mXDpi;
+            float mYDpi;
+            DisplayMetrics metrics = new DisplayMetrics();
+            getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            mXDpi = metrics.xdpi; // The exact physical pixels per inch of the screen in the X dimension.
+            mYDpi = metrics.ydpi;
+            PixelsPerMetersX = mXDpi / 10.0254f;
+            PixelsPerMetersY = mYDpi / 10.0254f;
         }
 
         private void validateCoordinates() {
@@ -112,25 +134,27 @@ public class GravityActivity extends AppCompatActivity implements SensorEventLis
             }
 
         }
-        
+
         private void updateCoordinates() {
+            float currentNS = System.nanoTime();
+            float timeDeltaS = (currentNS - lastUpdateNS) * NS2S;
+            lastUpdateNS = currentNS;
             float v = (float) Math.hypot(vx, vy);
             if (Math.abs(v) > 0.1) {
-                float fk = Math.max(gravity[2] * mooK, 0);
-                vx += -gravity[0] - fk * vx / v;
-                vy += gravity[1] - fk * vy / v;
+                float fk = Math.max(0, gravity[2] * mooK);
+                vx += timeDeltaS * (-gravity[0] - fk * vx / v) / MASS;
+                vy += timeDeltaS * (gravity[1] - fk * vy / v) / MASS;
             }
             else {
-                float fs = Math.max(gravity[2] * mooS, 0);
+                float fs = Math.max(0, gravity[2] * mooS);
                 float fxy = (float) Math.hypot(gravity[0], gravity[1]);
                 if (fxy < fs)
                     return;
-                vx += -gravity[0];
-                vy += gravity[1];
+                vx += timeDeltaS * -gravity[0] / MASS;
+                vy += timeDeltaS * gravity[1] / MASS;
             }
-
-            x += vx;
-            y += vy;
+            x += vx * PixelsPerMetersX * timeDeltaS;
+            y += vy * PixelsPerMetersY * timeDeltaS;
             validateCoordinates();
         }
 
