@@ -255,10 +255,6 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-### Windows ###
-# Windows thumbnail cache files
-ehthumbs_vista.db
-
 # Dump file
 *.stackdump
 
