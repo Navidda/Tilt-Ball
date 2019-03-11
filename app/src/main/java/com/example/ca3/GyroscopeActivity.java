@@ -1,5 +1,6 @@
 package com.example.ca3;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -12,6 +13,7 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 
 
@@ -68,12 +70,15 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
 
         private static final float mooS = 0.15f;
         private static final float mooK = 0.1f;
+        private static final float NS2S = 1.0f / 1000000000.0f;
 
+        private float[] deltaTheta = new float[]{0, 0};
+        private float timestamp;
         private Paint paint;
         private float x, y, vx, vy;
         private float[] gravity;
-        private int viewWidth;
-        private int viewHeight;
+        private float viewWidth;
+        private float viewHeight;
         private float PixelsPerMetersX;
         private float PixelsPerMetersY;
         private float lastUpdateNS;
@@ -85,13 +90,25 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
             setScreenDimensions();
         }
 
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (event.getAction() != MotionEvent.ACTION_UP)
+                return true;
+            x = viewWidth / 2;
+            y = viewHeight / 2;
+            vx = vy = 0;
+            deltaTheta = new float[]{0, 0};
+            return true;
+        }
+
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
             viewWidth = w;
             viewHeight = h;
-            x = w / 2;
-            y = h / 2;
+            x = viewWidth / 2;
+            y = viewHeight / 2;
         }
 
 
@@ -162,10 +179,6 @@ public class GyroscopeActivity extends AppCompatActivity implements SensorEventL
         }
 
 
-        // Create a constant to convert nanoseconds to seconds.
-        private static final float NS2S = 1.0f / 1000000000.0f;
-        private float[] deltaTheta = new float[]{0, 0};
-        private float timestamp;
 
         public void onSensorEvent(SensorEvent event) {
             //
